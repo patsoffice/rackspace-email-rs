@@ -1,11 +1,11 @@
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
-use std::fmt::Debug;
+use log::debug;
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
+use std::fmt::Debug;
 use thiserror::Error;
-use log::debug;
 
 /// Errors that can occur when interacting with the Rackspace Email API.
 #[derive(Error, Debug)]
@@ -164,7 +164,10 @@ fn validate_path_segment(value: &str, name: &str) -> Result<(), ApiError> {
         return Err(ApiError::Validation(format!("{} cannot be empty", name)));
     }
     if value.contains('/') || value.contains('\\') || value.contains('\0') {
-        return Err(ApiError::Validation(format!("{} cannot contain '/', '\\', or null bytes", name)));
+        return Err(ApiError::Validation(format!(
+            "{} cannot contain '/', '\\', or null bytes",
+            name
+        )));
     }
     Ok(())
 }
@@ -270,7 +273,14 @@ impl RackspaceClient {
     ///
     /// If a user is over the throttling limit then a 403 HTTP code will be returned with an "Exceeded request limits" message.
     /// This method implements a retry mechanism with exponential backoff for this specific error.
-    async fn request<T, B, Q>(&self, method: Method, path: &str, body: Option<&B>, query: Option<&Q>, as_form: bool) -> Result<T, ApiError>
+    async fn request<T, B, Q>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&B>,
+        query: Option<&Q>,
+        as_form: bool,
+    ) -> Result<T, ApiError>
     where
         T: serde::de::DeserializeOwned,
         B: Serialize + ?Sized,
@@ -285,7 +295,8 @@ impl RackspaceClient {
             // Regenerate signature each attempt since it includes the current timestamp
             let signature = self.generate_signature();
 
-            let mut req = self.client
+            let mut req = self
+                .client
                 .request(method.clone(), &url)
                 .header("User-Agent", &self.user_agent)
                 .header("X-Api-Signature", signature)
@@ -330,7 +341,10 @@ impl RackspaceClient {
             }
 
             let status = resp.status();
-            let text = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
+            let text = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             debug!("Error Response Body: {}", text);
 
             // Check for throttling (collapsed conditional)
@@ -338,12 +352,18 @@ impl RackspaceClient {
                 && text.contains("Exceeded request limits")
                 && attempt <= max_retries
             {
-                debug!("Throttling detected. Retrying attempt {}/{}...", attempt, max_retries);
+                debug!(
+                    "Throttling detected. Retrying attempt {}/{}...",
+                    attempt, max_retries
+                );
                 tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
                 continue;
             }
 
-            return Err(ApiError::Http { status: status.as_u16(), body: text });
+            return Err(ApiError::Http {
+                status: status.as_u16(),
+                body: text,
+            });
         }
     }
 
@@ -351,7 +371,9 @@ impl RackspaceClient {
     ///
     /// This is typically used to discover the Customer ID (Account Number).
     pub async fn list_customers(&self) -> Result<Vec<Customer>, ApiError> {
-        let resp: CustomerList = self.request::<CustomerList, (), ()>(Method::GET, "/customers", None, None, false).await?;
+        let resp: CustomerList = self
+            .request::<CustomerList, (), ()>(Method::GET, "/customers", None, None, false)
+            .await?;
         Ok(resp.customers)
     }
 
@@ -363,7 +385,9 @@ impl RackspaceClient {
         if let Some(c) = customers.first() {
             Ok(c.account_number.clone())
         } else {
-            Err(ApiError::Api("No customers found for this user key".to_string()))
+            Err(ApiError::Api(
+                "No customers found for this user key".to_string(),
+            ))
         }
     }
 
@@ -376,9 +400,20 @@ impl RackspaceClient {
         let limit = page_size.unwrap_or(50);
 
         loop {
-            let params = PageParams { offset: Some(offset), limit: Some(limit) };
+            let params = PageParams {
+                offset: Some(offset),
+                limit: Some(limit),
+            };
             let path = self.customer_path("/domains")?;
-            let resp: PagedResponse<DomainList> = self.request::<PagedResponse<DomainList>, (), PageParams>(Method::GET, &path, None, Some(&params), false).await?;
+            let resp: PagedResponse<DomainList> = self
+                .request::<PagedResponse<DomainList>, (), PageParams>(
+                    Method::GET,
+                    &path,
+                    None,
+                    Some(&params),
+                    false,
+                )
+                .await?;
 
             let batch_size = resp.items.domains.len();
             domains.extend(resp.items.domains);
@@ -395,7 +430,8 @@ impl RackspaceClient {
     pub async fn get_domain(&self, domain: &str) -> Result<Domain, ApiError> {
         validate_path_segment(domain, "domain")?;
         let path = self.customer_path(&format!("/domains/{}", domain))?;
-        self.request::<Domain, (), ()>(Method::GET, &path, None, None, false).await
+        self.request::<Domain, (), ()>(Method::GET, &path, None, None, false)
+            .await
     }
 
     /// Lists Rackspace Email aliases for a specific domain.
@@ -403,16 +439,31 @@ impl RackspaceClient {
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
     ///
     /// Automatically handles pagination to retrieve all aliases.
-    pub async fn list_rackspace_aliases(&self, domain: &str, page_size: Option<usize>) -> Result<Vec<Alias>, ApiError> {
+    pub async fn list_rackspace_aliases(
+        &self,
+        domain: &str,
+        page_size: Option<usize>,
+    ) -> Result<Vec<Alias>, ApiError> {
         validate_path_segment(domain, "domain")?;
         let mut all_aliases = Vec::new();
         let mut offset = 0;
         let limit = page_size.unwrap_or(50);
 
         loop {
-            let params = PageParams { offset: Some(offset), limit: Some(limit) };
+            let params = PageParams {
+                offset: Some(offset),
+                limit: Some(limit),
+            };
             let path = self.customer_path(&format!("/domains/{}/rs/aliases", domain))?;
-            let resp: PagedResponse<AliasList> = self.request::<PagedResponse<AliasList>, (), PageParams>(Method::GET, &path, None, Some(&params), false).await?;
+            let resp: PagedResponse<AliasList> = self
+                .request::<PagedResponse<AliasList>, (), PageParams>(
+                    Method::GET,
+                    &path,
+                    None,
+                    Some(&params),
+                    false,
+                )
+                .await?;
 
             let batch_size = resp.items.aliases.len();
             for item in resp.items.aliases {
@@ -439,31 +490,49 @@ impl RackspaceClient {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(alias, "alias")?;
         let path = self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias))?;
-        let resp = self.request::<AliasResponse, (), ()>(Method::GET, &path, None, None, false).await?;
+        let resp = self
+            .request::<AliasResponse, (), ()>(Method::GET, &path, None, None, false)
+            .await?;
         Ok(Alias::from(resp))
     }
 
     /// Creates a new Rackspace Email alias.
     ///
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
-    pub async fn create_rackspace_alias(&self, domain: &str, alias: &Alias) -> Result<(), ApiError> {
+    pub async fn create_rackspace_alias(
+        &self,
+        domain: &str,
+        alias: &Alias,
+    ) -> Result<(), ApiError> {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(&alias.alias, "alias")?;
-        let path = self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias.alias))?;
-        let body = AliasRequest { alias_emails: alias.email_list.join(", ") };
-        self.request::<(), AliasRequest, ()>(Method::POST, &path, Some(&body), None, true).await?;
+        let path =
+            self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias.alias))?;
+        let body = AliasRequest {
+            alias_emails: alias.email_list.join(", "),
+        };
+        self.request::<(), AliasRequest, ()>(Method::POST, &path, Some(&body), None, true)
+            .await?;
         Ok(())
     }
 
     /// Updates an existing Rackspace Email alias.
     ///
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
-    pub async fn update_rackspace_alias(&self, domain: &str, alias: &Alias) -> Result<(), ApiError> {
+    pub async fn update_rackspace_alias(
+        &self,
+        domain: &str,
+        alias: &Alias,
+    ) -> Result<(), ApiError> {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(&alias.alias, "alias")?;
-        let path = self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias.alias))?;
-        let body = AliasRequest { alias_emails: alias.email_list.join(", ") };
-        self.request::<(), AliasRequest, ()>(Method::PUT, &path, Some(&body), None, true).await?;
+        let path =
+            self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias.alias))?;
+        let body = AliasRequest {
+            alias_emails: alias.email_list.join(", "),
+        };
+        self.request::<(), AliasRequest, ()>(Method::PUT, &path, Some(&body), None, true)
+            .await?;
         Ok(())
     }
 
@@ -474,7 +543,8 @@ impl RackspaceClient {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(alias, "alias")?;
         let path = self.customer_path(&format!("/domains/{}/rs/aliases/{}", domain, alias))?;
-        self.request::<(), (), ()>(Method::DELETE, &path, None, None, false).await
+        self.request::<(), (), ()>(Method::DELETE, &path, None, None, false)
+            .await
     }
 
     /// Lists Rackspace Email mailboxes for a specific domain.
@@ -482,16 +552,31 @@ impl RackspaceClient {
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
     ///
     /// Automatically handles pagination to retrieve all mailboxes.
-    pub async fn list_rackspace_mailboxes(&self, domain: &str, page_size: Option<usize>) -> Result<Vec<Mailbox>, ApiError> {
+    pub async fn list_rackspace_mailboxes(
+        &self,
+        domain: &str,
+        page_size: Option<usize>,
+    ) -> Result<Vec<Mailbox>, ApiError> {
         validate_path_segment(domain, "domain")?;
         let mut all_mailboxes = Vec::new();
         let mut offset = 0;
         let limit = page_size.unwrap_or(50);
 
         loop {
-            let params = PageParams { offset: Some(offset), limit: Some(limit) };
+            let params = PageParams {
+                offset: Some(offset),
+                limit: Some(limit),
+            };
             let path = self.customer_path(&format!("/domains/{}/rs/mailboxes", domain))?;
-            let resp: PagedResponse<MailboxList> = self.request::<PagedResponse<MailboxList>, (), PageParams>(Method::GET, &path, None, Some(&params), false).await?;
+            let resp: PagedResponse<MailboxList> = self
+                .request::<PagedResponse<MailboxList>, (), PageParams>(
+                    Method::GET,
+                    &path,
+                    None,
+                    Some(&params),
+                    false,
+                )
+                .await?;
 
             let batch_size = resp.items.mailboxes.len();
             all_mailboxes.extend(resp.items.mailboxes);
@@ -507,31 +592,49 @@ impl RackspaceClient {
     /// Retrieves details for a specific Rackspace Email mailbox.
     ///
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
-    pub async fn get_rackspace_mailbox(&self, domain: &str, name: &str) -> Result<Mailbox, ApiError> {
+    pub async fn get_rackspace_mailbox(
+        &self,
+        domain: &str,
+        name: &str,
+    ) -> Result<Mailbox, ApiError> {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(name, "mailbox name")?;
         let path = self.customer_path(&format!("/domains/{}/rs/mailboxes/{}", domain, name))?;
-        self.request::<Mailbox, (), ()>(Method::GET, &path, None, None, false).await
+        self.request::<Mailbox, (), ()>(Method::GET, &path, None, None, false)
+            .await
     }
 
     /// Creates a new Rackspace Email mailbox.
     ///
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
-    pub async fn create_rackspace_mailbox(&self, domain: &str, mailbox: &Mailbox) -> Result<Mailbox, ApiError> {
+    pub async fn create_rackspace_mailbox(
+        &self,
+        domain: &str,
+        mailbox: &Mailbox,
+    ) -> Result<Mailbox, ApiError> {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(&mailbox.name, "mailbox name")?;
         let path = self.customer_path(&format!("/domains/{}/rs/mailboxes", domain))?;
-        self.request::<Mailbox, Mailbox, ()>(Method::POST, &path, Some(mailbox), None, false).await
+        self.request::<Mailbox, Mailbox, ()>(Method::POST, &path, Some(mailbox), None, false)
+            .await
     }
 
     /// Updates an existing Rackspace Email mailbox.
     ///
     /// Note: This applies to Rackspace email accounts, distinct from Exchange email accounts.
-    pub async fn update_rackspace_mailbox(&self, domain: &str, mailbox: &Mailbox) -> Result<Mailbox, ApiError> {
+    pub async fn update_rackspace_mailbox(
+        &self,
+        domain: &str,
+        mailbox: &Mailbox,
+    ) -> Result<Mailbox, ApiError> {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(&mailbox.name, "mailbox name")?;
-        let path = self.customer_path(&format!("/domains/{}/rs/mailboxes/{}", domain, mailbox.name))?;
-        self.request::<Mailbox, Mailbox, ()>(Method::PUT, &path, Some(mailbox), None, false).await
+        let path = self.customer_path(&format!(
+            "/domains/{}/rs/mailboxes/{}",
+            domain, mailbox.name
+        ))?;
+        self.request::<Mailbox, Mailbox, ()>(Method::PUT, &path, Some(mailbox), None, false)
+            .await
     }
 
     /// Deletes a Rackspace Email mailbox.
@@ -541,7 +644,8 @@ impl RackspaceClient {
         validate_path_segment(domain, "domain")?;
         validate_path_segment(name, "mailbox name")?;
         let path = self.customer_path(&format!("/domains/{}/rs/mailboxes/{}", domain, name))?;
-        self.request::<(), (), ()>(Method::DELETE, &path, None, None, false).await
+        self.request::<(), (), ()>(Method::DELETE, &path, None, None, false)
+            .await
     }
 }
 
@@ -575,10 +679,15 @@ mod tests {
             "QHOvchm/40czXhJ1OxfxK7jDHr3t".to_string(),
             None,
             Some("Rackspace Management Interface".to_string()),
-        ).unwrap().with_clock(Box::new(FixedClock));
+        )
+        .unwrap()
+        .with_clock(Box::new(FixedClock));
 
         let signature = client.generate_signature();
-        assert_eq!(signature, "eGbq9/2hcZsRlr1JV1Pi:20010308143725:46VIwd66mOFGG8IkbgnLlXnfnkU=");
+        assert_eq!(
+            signature,
+            "eGbq9/2hcZsRlr1JV1Pi:20010308143725:46VIwd66mOFGG8IkbgnLlXnfnkU="
+        );
     }
 
     /// Verifies that the client correctly generates and sends the X-Api-Signature header.
@@ -606,10 +715,15 @@ mod tests {
         let sig_hash = general_purpose::STANDARD.encode(hash);
         let expected_header = format!("{}:{}:{}", user_key, timestamp, sig_hash);
 
-        let client = RackspaceClient::new(user_key.into(), secret_key.into(), Some("123".into()), Some(user_agent.into()))
-            .unwrap()
-            .with_base_url(mock_server.uri())
-            .with_clock(Box::new(MockClock));
+        let client = RackspaceClient::new(
+            user_key.into(),
+            secret_key.into(),
+            Some("123".into()),
+            Some(user_agent.into()),
+        )
+        .unwrap()
+        .with_base_url(mock_server.uri())
+        .with_clock(Box::new(MockClock));
 
         Mock::given(method("GET"))
             .and(path("/customers/123/domains"))
@@ -651,7 +765,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let domains = client.list_domains(None).await.expect("Failed to list domains");
+        let domains = client
+            .list_domains(None)
+            .await
+            .expect("Failed to list domains");
 
         assert_eq!(domains.len(), 2);
         assert_eq!(domains[0].name, "domain-1.com");
@@ -710,7 +827,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let domains = client.list_domains(None).await.expect("Failed to list domains");
+        let domains = client
+            .list_domains(None)
+            .await
+            .expect("Failed to list domains");
 
         assert_eq!(domains.len(), 60);
         assert_eq!(domains[0].name, "p1-domain-0.com");
@@ -741,7 +861,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let mailboxes = client.list_rackspace_mailboxes("example.com", None).await.expect("Failed to list mailboxes");
+        let mailboxes = client
+            .list_rackspace_mailboxes("example.com", None)
+            .await
+            .expect("Failed to list mailboxes");
 
         assert_eq!(mailboxes.len(), 2);
         assert_eq!(mailboxes[0].name, "user1");
@@ -800,7 +923,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let mailboxes = client.list_rackspace_mailboxes("example.com", None).await.expect("Failed to list mailboxes");
+        let mailboxes = client
+            .list_rackspace_mailboxes("example.com", None)
+            .await
+            .expect("Failed to list mailboxes");
 
         assert_eq!(mailboxes.len(), 60);
         assert_eq!(mailboxes[0].name, "user-p1-0");
@@ -831,7 +957,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let aliases = client.list_rackspace_aliases("example.com", None).await.expect("Failed to list aliases");
+        let aliases = client
+            .list_rackspace_aliases("example.com", None)
+            .await
+            .expect("Failed to list aliases");
 
         assert_eq!(aliases.len(), 2);
         assert_eq!(aliases[0].alias, "obfuscated_alias_1");
@@ -861,10 +990,16 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let alias = client.get_rackspace_alias("example.com", "testing").await.expect("Failed to get alias");
+        let alias = client
+            .get_rackspace_alias("example.com", "testing")
+            .await
+            .expect("Failed to get alias");
 
         assert_eq!(alias.alias, "testing");
-        assert_eq!(alias.email_list, vec!["user1@example.com", "user2@example.com"]);
+        assert_eq!(
+            alias.email_list,
+            vec!["user1@example.com", "user2@example.com"]
+        );
     }
 
     #[tokio::test]
@@ -921,7 +1056,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let aliases = client.list_rackspace_aliases("example.com", None).await.expect("Failed to list aliases");
+        let aliases = client
+            .list_rackspace_aliases("example.com", None)
+            .await
+            .expect("Failed to list aliases");
 
         assert_eq!(aliases.len(), 60);
         assert_eq!(aliases[0].alias, "alias-p1-0");
@@ -1057,7 +1195,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let aliases = client.list_rackspace_aliases("example.com", None).await.expect("Failed to list aliases");
+        let aliases = client
+            .list_rackspace_aliases("example.com", None)
+            .await
+            .expect("Failed to list aliases");
 
         assert_eq!(aliases.len(), 2);
 
@@ -1085,7 +1226,9 @@ mod tests {
             .and(path("/domains/example.com/rs/aliases/new_alias"))
             .and(header("Content-Type", "application/x-www-form-urlencoded"))
             // serde_urlencoded encodes space as + and comma as %2C
-            .and(body_string("aliasEmails=a%40example.com%2C+b%40example.com"))
+            .and(body_string(
+                "aliasEmails=a%40example.com%2C+b%40example.com",
+            ))
             .respond_with(ResponseTemplate::new(200)) // Empty body
             .mount(&mock_server)
             .await;
@@ -1133,7 +1276,9 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = client.delete_rackspace_alias("example.com", "del_alias").await;
+        let result = client
+            .delete_rackspace_alias("example.com", "del_alias")
+            .await;
         assert!(result.is_ok());
     }
 }

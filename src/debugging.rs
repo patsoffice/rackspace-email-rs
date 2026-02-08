@@ -1,16 +1,26 @@
-use rackspace_email::RackspaceClient;
-use std::env;
 use chrono::Utc;
+use rackspace_email::RackspaceClient;
 use rand::seq::SliceRandom;
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    let user_key = env::var("RACKSPACE_USER_KEY").expect("RACKSPACE_USER_KEY must be set").trim().to_string();
-    let secret_key = env::var("RACKSPACE_SECRET_KEY").expect("RACKSPACE_SECRET_KEY must be set").trim().to_string();
-    let customer_id = env::var("RACKSPACE_CUSTOMER_ID").ok().map(|s| s.trim().to_string());
-    let target_domain = env::var("RACKSPACE_DOMAIN").ok().map(|s| s.trim().to_string());
+    let user_key = env::var("RACKSPACE_USER_KEY")
+        .expect("RACKSPACE_USER_KEY must be set")
+        .trim()
+        .to_string();
+    let secret_key = env::var("RACKSPACE_SECRET_KEY")
+        .expect("RACKSPACE_SECRET_KEY must be set")
+        .trim()
+        .to_string();
+    let customer_id = env::var("RACKSPACE_CUSTOMER_ID")
+        .ok()
+        .map(|s| s.trim().to_string());
+    let target_domain = env::var("RACKSPACE_DOMAIN")
+        .ok()
+        .map(|s| s.trim().to_string());
 
     println!("Timestamp: {}", Utc::now().format("%Y%m%d%H%M%S"));
 
@@ -21,13 +31,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Found {} domains.", domains.len());
 
     for domain in &domains {
-        println!("- {} (Service Type: {:?})", domain.name, domain.service_type);
+        println!(
+            "- {} (Service Type: {:?})",
+            domain.name, domain.service_type
+        );
     }
 
     let selected_domain_name = if let Some(d) = target_domain {
         Some(d)
     } else {
-        domains.choose(&mut rand::thread_rng()).map(|d| d.name.clone())
+        domains
+            .choose(&mut rand::thread_rng())
+            .map(|d| d.name.clone())
     };
 
     if let Some(domain_name) = selected_domain_name {
@@ -48,7 +63,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(mailboxes) => {
                 println!("Found {} mailboxes.", mailboxes.len());
                 for mailbox in mailboxes {
-                    println!("  - {} (Enabled: {:?}, Size: {:?})", mailbox.name, mailbox.enabled, mailbox.size);
+                    println!(
+                        "  - {} (Enabled: {:?}, Size: {:?})",
+                        mailbox.name, mailbox.enabled, mailbox.size
+                    );
                 }
             }
             Err(e) => {
