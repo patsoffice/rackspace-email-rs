@@ -164,7 +164,7 @@ fn validate_path_segment(value: &str, name: &str) -> Result<(), ApiError> {
         return Err(ApiError::Validation(format!("{} cannot be empty", name)));
     }
     if value.contains('/') || value.contains('\\') || value.contains('\0') {
-        return Err(ApiError::Validation(format!("{} contains invalid characters", name)));
+        return Err(ApiError::Validation(format!("{} cannot contain '/', '\\', or null bytes", name)));
     }
     Ok(())
 }
