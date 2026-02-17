@@ -21,7 +21,7 @@ cargo clippy --all-features --all-targets
 cargo clippy --all-features --all-targets --allow-dirty --fix
 
 # Format check (CI enforces this)
-cargo fmt -- --check
+cargo fmt --check
 
 # Format fix
 cargo fmt

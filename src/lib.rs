@@ -203,9 +203,7 @@ impl RackspaceClient {
         customer_id: Option<&str>,
         user_agent: Option<&str>,
     ) -> Result<Self, ApiError> {
-        let ua_string = user_agent
-            .unwrap_or("RustRackspaceClient/0.2")
-            .to_string();
+        let ua_string = user_agent.unwrap_or("RustRackspaceClient/0.2").to_string();
         let client = Client::builder().user_agent(&ua_string).build()?;
 
         Ok(Self {
@@ -717,15 +715,10 @@ mod tests {
         let sig_hash = general_purpose::STANDARD.encode(hash);
         let expected_header = format!("{}:{}:{}", user_key, timestamp, sig_hash);
 
-        let client = RackspaceClient::new(
-            user_key,
-            secret_key,
-            Some("123"),
-            Some(user_agent),
-        )
-        .unwrap()
-        .with_base_url(&mock_server.uri())
-        .with_clock(Box::new(MockClock));
+        let client = RackspaceClient::new(user_key, secret_key, Some("123"), Some(user_agent))
+            .unwrap()
+            .with_base_url(&mock_server.uri())
+            .with_clock(Box::new(MockClock));
 
         Mock::given(method("GET"))
             .and(path("/customers/123/domains"))
