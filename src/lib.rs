@@ -198,29 +198,31 @@ impl RackspaceClient {
     ///
     /// Returns an error if the HTTP client cannot be built.
     pub fn new(
-        user_key: String,
-        secret_key: String,
-        customer_id: Option<String>,
-        user_agent: Option<String>,
+        user_key: &str,
+        secret_key: &str,
+        customer_id: Option<&str>,
+        user_agent: Option<&str>,
     ) -> Result<Self, ApiError> {
-        let ua_string = user_agent.unwrap_or_else(|| "RustRackspaceClient/0.1".to_string());
+        let ua_string = user_agent
+            .unwrap_or("RustRackspaceClient/0.2")
+            .to_string();
         let client = Client::builder().user_agent(&ua_string).build()?;
 
         Ok(Self {
             client,
             base_url: "https://api.emailsrvr.com/v1".to_string(),
-            user_key,
-            secret_key,
+            user_key: user_key.to_string(),
+            secret_key: secret_key.to_string(),
             user_agent: ua_string,
-            customer_id,
+            customer_id: customer_id.map(str::to_string),
             clock: Box::new(SystemClock),
             max_retries: 3,
         })
     }
 
     /// Sets a custom base URL for the client. Useful for testing.
-    pub fn with_base_url(mut self, base_url: String) -> Self {
-        self.base_url = base_url;
+    pub fn with_base_url(mut self, base_url: &str) -> Self {
+        self.base_url = base_url.to_string();
         self
     }
 
@@ -237,8 +239,8 @@ impl RackspaceClient {
     }
 
     /// Sets the customer ID (account number) on the client.
-    pub fn set_customer_id(&mut self, id: String) {
-        self.customer_id = Some(id);
+    pub fn set_customer_id(&mut self, id: &str) {
+        self.customer_id = Some(id.to_string());
     }
 
     fn generate_signature(&self) -> String {
@@ -675,10 +677,10 @@ mod tests {
         }
 
         let client = RackspaceClient::new(
-            "eGbq9/2hcZsRlr1JV1Pi".to_string(),
-            "QHOvchm/40czXhJ1OxfxK7jDHr3t".to_string(),
+            "eGbq9/2hcZsRlr1JV1Pi",
+            "QHOvchm/40czXhJ1OxfxK7jDHr3t",
             None,
-            Some("Rackspace Management Interface".to_string()),
+            Some("Rackspace Management Interface"),
         )
         .unwrap()
         .with_clock(Box::new(FixedClock));
@@ -716,13 +718,13 @@ mod tests {
         let expected_header = format!("{}:{}:{}", user_key, timestamp, sig_hash);
 
         let client = RackspaceClient::new(
-            user_key.into(),
-            secret_key.into(),
-            Some("123".into()),
-            Some(user_agent.into()),
+            user_key,
+            secret_key,
+            Some("123"),
+            Some(user_agent),
         )
         .unwrap()
-        .with_base_url(mock_server.uri())
+        .with_base_url(&mock_server.uri())
         .with_clock(Box::new(MockClock));
 
         Mock::given(method("GET"))
@@ -744,9 +746,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_domains_parsing() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let response_body = serde_json::json!({
@@ -778,9 +780,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_domains_pagination() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         // Page 1: 50 items (Full page, triggers next fetch)
@@ -840,9 +842,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_mailboxes_parsing() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let response_body = serde_json::json!({
@@ -874,9 +876,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_mailboxes_pagination() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         // Page 1: 50 items
@@ -936,9 +938,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_aliases_parsing() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let response_body = serde_json::json!({
@@ -972,9 +974,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_alias_parsing_detailed() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let response_body = serde_json::json!({
@@ -1005,9 +1007,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_aliases_pagination() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         // Page 1: 50 items
@@ -1071,9 +1073,9 @@ mod tests {
         tokio::time::pause();
 
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         // Mock 2: Success (Mounted first, checked last due to LIFO)
@@ -1107,9 +1109,9 @@ mod tests {
         tokio::time::pause();
 
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         // Always return throttling error
@@ -1134,9 +1136,9 @@ mod tests {
         tokio::time::pause();
 
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock))
             .with_max_retries(0);
 
@@ -1161,9 +1163,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_aliases_multi_member() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let list_response = serde_json::json!({
@@ -1212,9 +1214,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_rackspace_alias() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let alias = Alias {
@@ -1240,9 +1242,9 @@ mod tests {
     #[tokio::test]
     async fn test_update_rackspace_alias() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         let alias = Alias {
@@ -1265,9 +1267,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_rackspace_alias() {
         let mock_server = MockServer::start().await;
-        let client = RackspaceClient::new("key".into(), "secret".into(), None, None)
+        let client = RackspaceClient::new("key", "secret", None, None)
             .unwrap()
-            .with_base_url(mock_server.uri())
+            .with_base_url(&mock_server.uri())
             .with_clock(Box::new(MockClock));
 
         Mock::given(method("DELETE"))

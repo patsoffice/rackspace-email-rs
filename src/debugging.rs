@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Timestamp: {}", Utc::now().format("%Y%m%d%H%M%S"));
 
-    let client = RackspaceClient::new(user_key, secret_key, customer_id.clone(), None)?;
+    let client = RackspaceClient::new(&user_key, &secret_key, customer_id.as_deref(), None)?;
 
     println!("Listing domains...");
     let domains = client.list_domains(None).await?;

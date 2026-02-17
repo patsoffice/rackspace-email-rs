@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .trim()
         .to_string();
 
-    let client = RackspaceClient::new(user_key, secret_key, customer_id, None)?;
+    let client = RackspaceClient::new(&user_key, &secret_key, customer_id.as_deref(), None)?;
 
     let args: Vec<String> = env::args().collect();
     // args[0] is binary name
