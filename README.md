@@ -21,7 +21,7 @@ Add the library to your `Cargo.toml`.
 
 ```toml
 [dependencies]
-rackspace-email = "0.1.0"
+rackspace-email = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -70,8 +70,8 @@ use rackspace_email::{RackspaceClient, Alias, ApiError, Mailbox};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the client (returns Result)
     let mut client = RackspaceClient::new(
-        "YOUR_USER_KEY".to_string(),
-        "YOUR_SECRET_KEY".to_string(),
+        "YOUR_USER_KEY",
+        "YOUR_SECRET_KEY",
         None, // Customer ID (Optional)
         None, // Optional User-Agent override
     )?
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Discover and set customer ID (for reseller accounts)
     let customer_id = client.find_customer_id().await?;
-    client.set_customer_id(customer_id);
+    client.set_customer_id(&customer_id);
 
     // List Domains
     let domains = client.list_domains(None).await?;
